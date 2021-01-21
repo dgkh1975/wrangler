@@ -156,11 +156,13 @@ impl DurableObjectsTarget {
             .filter_map(|ns| ns.namespace_name.as_ref())
             .collect::<Vec<_>>();
 
-        let existing_namespaces = self.existing_namespaces.borrow();
-        let existing_namespace_names = existing_namespaces
-            .keys()
-            .map(|s| s.to_owned())
-            .collect::<Vec<_>>();
+        let existing_namespace_names = {
+            let existing_namespaces = self.existing_namespaces.borrow();
+            existing_namespaces
+                .keys()
+                .map(|s| s.to_owned())
+                .collect::<Vec<_>>()
+        };
 
         let new_self_referential_namespace_names =
             self.durable_objects.uses.iter().flatten().filter_map(|ns| {
@@ -187,7 +189,7 @@ impl DurableObjectsTarget {
             )?;
             self.existing_namespaces
                 .borrow_mut()
-                .insert(new_ns.id.clone(), new_ns);
+                .insert(new_ns.name.clone(), new_ns);
         }
 
         Ok(())
