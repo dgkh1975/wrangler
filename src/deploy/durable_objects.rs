@@ -67,6 +67,16 @@ impl DurableObjectsTarget {
         Ok(())
     }
 
+    pub fn only_hydrate(
+        &self,
+        user: &GlobalUser,
+        target: &mut Target,
+    ) -> Result<(), failure::Error> {
+        self.get_existing_namespaces(user)?;
+        self.hydrate_target_with_ns_ids(target)?;
+        Ok(())
+    }
+
     pub fn deploy(&self, user: &GlobalUser) -> Result<Vec<String>, failure::Error> {
         let existing_namespaces = self.existing_namespaces.borrow();
         let new_namespaces = self

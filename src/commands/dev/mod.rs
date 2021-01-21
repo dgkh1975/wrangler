@@ -18,7 +18,7 @@ use crate::terminal::styles;
 /// `wrangler dev` starts a server on a dev machine that routes incoming HTTP requests
 /// to a Cloudflare Workers runtime and returns HTTP responses
 pub fn dev(
-    target: Target,
+    mut target: Target,
     deployments: DeploymentSet,
     user: Option<GlobalUser>,
     server_config: ServerConfig,
@@ -28,6 +28,16 @@ pub fn dev(
 ) -> Result<(), failure::Error> {
     // before serving requests we must first build the Worker
     build_target(&target)?;
+
+    if let Some(user) = &user {
+        hydrate_durable_object_bindings(user, &deployments, &mut target)?;
+    } else {
+        failure::bail!(
+            "You've configured your project to use durable object namespaces by specifying the\n\
+            namespace name, but you must be authenticated in order for Wrangler to retrieve\n\
+            the IDs for these namespace names."
+        );
+    }
 
     let deploy_target = {
         let valid_targets = deployments
@@ -89,4 +99,21 @@ pub fn dev(
     }
 
     gcs::dev(target, server_config, local_protocol, verbose)
+}
+
+fn hydrate_durable_object_bindings(
+    user: &GlobalUser,
+    deploy_targets: &[DeployTarget],
+    target: &mut Target,
+) -> Result<(), failure::Error> {
+    if let Some(dot) = deploy_targets.iter().find_map(|t| {
+        if let DeployTarget::DurableObjects(t) = t {
+            Some(t)
+        } else {
+            None
+        }
+    }) {
+        dot.only_hydrate(user, target)?;
+    }
+    Ok(())
 }
