@@ -1,5 +1,6 @@
 use std::fmt;
 
+use anyhow::Result;
 use serde::Serialize;
 
 use cloudflare::endpoints::workers::{CreateRoute, CreateRouteParams, ListRoutes};
@@ -17,7 +18,7 @@ pub struct ZonedTarget {
 }
 
 impl ZonedTarget {
-    pub fn build(script_name: &str, route_config: &RouteConfig) -> Result<Self, failure::Error> {
+    pub fn build(script_name: &str, route_config: &RouteConfig) -> Result<Self> {
         match route_config.zone_id.as_ref() {
             Some(zone_id) if !zone_id.is_empty() => {
                 let new_route = |route: &String| Route {
@@ -39,23 +40,19 @@ impl ZonedTarget {
                     }))
                     .collect();
 
-                if routes.is_empty() {
-                    failure::bail!("No routes specified");
-                }
-
                 Ok(Self {
                     zone_id: zone_id.to_owned(),
                     routes,
                 })
             }
-            _ => failure::bail!("field `zone_id` is required to deploy to routes"),
+            _ => anyhow::bail!("field `zone_id` is required to deploy to routes"),
         }
     }
 
-    pub fn deploy(&self, user: &GlobalUser) -> Result<Vec<String>, failure::Error> {
+    pub fn deploy(&self, user: &GlobalUser) -> Result<Vec<String>> {
         log::info!("publishing to zone {}", self.zone_id);
 
-        let published_routes = publish_routes(&user, self)?;
+        let published_routes = publish_routes(user, self)?;
 
         let display_results: Vec<String> = published_routes.iter().map(|r| r.to_string()).collect();
 
@@ -66,7 +63,7 @@ impl ZonedTarget {
 pub fn publish_routes(
     user: &GlobalUser,
     zoned_config: &ZonedTarget,
-) -> Result<Vec<RouteUploadResult>, failure::Error> {
+) -> Result<Vec<RouteUploadResult>> {
     // For the moment, we'll just make this call once and make all our decisions based on the response.
     // There is a possibility of race conditions, but we just report back the results and allow the
     // user to decide how to proceed.
@@ -81,22 +78,18 @@ pub fn publish_routes(
     Ok(deployed_routes)
 }
 
-fn fetch_all(user: &GlobalUser, zone_identifier: &str) -> Result<Vec<Route>, failure::Error> {
+fn fetch_all(user: &GlobalUser, zone_identifier: &str) -> Result<Vec<Route>> {
     let client = http::cf_v4_client(user)?;
 
     let routes: Vec<Route> = match client.request(&ListRoutes { zone_identifier }) {
         Ok(success) => success.result.iter().map(Route::from).collect(),
-        Err(e) => failure::bail!("{}", http::format_error(e, None)), // TODO: add suggestion fn
+        Err(e) => anyhow::bail!("{}", http::format_error(e, None)), // TODO: add suggestion fn
     };
 
     Ok(routes)
 }
 
-fn create(
-    user: &GlobalUser,
-    zone_identifier: &str,
-    route: &Route,
-) -> Result<Route, failure::Error> {
+fn create(user: &GlobalUser, zone_identifier: &str, route: &Route) -> Result<Route> {
     let client = http::cf_v4_client(user)?;
 
     log::info!("Creating your route {:#?}", &route.pattern,);
@@ -112,7 +105,7 @@ fn create(
             pattern: route.pattern.clone(),
             script: route.script.clone(),
         }),
-        Err(e) => failure::bail!("{}", http::format_error(e, Some(&routes_error_help))),
+        Err(e) => anyhow::bail!("{}", http::format_error(e, Some(&routes_error_help))),
     }
 }
 
@@ -183,7 +176,7 @@ fn deploy_route(
     }
 
     // if none of the existing routes match this one, we should create a new route
-    match create(user, zone_id, &route) {
+    match create(user, zone_id, route) {
         // we want to show the new route along with its id
         Ok(created) => RouteUploadResult::New(created),
         // if there is an error, we want to know which route triggered it

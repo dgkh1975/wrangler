@@ -50,41 +50,41 @@ pub struct EnvConfig {
 
 impl EnvConfig {
     pub fn custom_script_name(name: &'static str) -> EnvConfig {
-        let mut env_config = EnvConfig::default();
-        env_config.name = Some(name);
-
-        env_config
+        EnvConfig {
+            name: Some(name),
+            ..Default::default()
+        }
     }
 
     pub fn zoneless(workers_dev: bool) -> EnvConfig {
-        let mut env_config = EnvConfig::default();
-        env_config.workers_dev = Some(workers_dev);
-
-        env_config
+        EnvConfig {
+            workers_dev: Some(workers_dev),
+            ..Default::default()
+        }
     }
 
     pub fn zoneless_with_account_id(workers_dev: bool, account_id: &'static str) -> EnvConfig {
-        let mut env_config = EnvConfig::default();
-        env_config.account_id = Some(account_id);
-        env_config.workers_dev = Some(workers_dev);
-
-        env_config
+        EnvConfig {
+            account_id: Some(account_id),
+            workers_dev: Some(workers_dev),
+            ..Default::default()
+        }
     }
 
     pub fn zoned_single_route(zone_id: &'static str, route: &'static str) -> EnvConfig {
-        let mut env_config = EnvConfig::default();
-        env_config.zone_id = Some(zone_id);
-        env_config.route = Some(route);
-
-        env_config
+        EnvConfig {
+            zone_id: Some(zone_id),
+            route: Some(route),
+            ..Default::default()
+        }
     }
 
     pub fn zoned_multi_route(zone_id: &'static str, routes: Vec<&'static str>) -> EnvConfig {
-        let mut env_config = EnvConfig::default();
-        env_config.zone_id = Some(zone_id);
-        env_config.routes = Some(routes);
-
-        env_config
+        EnvConfig {
+            zone_id: Some(zone_id),
+            routes: Some(routes),
+            ..Default::default()
+        }
     }
 }
 
@@ -112,11 +112,12 @@ pub struct WranglerToml {
 impl WranglerToml {
     // base build configs
     pub fn webpack(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::default();
-        wrangler_toml.name = Some(name);
-        wrangler_toml.target_type = Some("webpack");
-
-        wrangler_toml
+        WranglerToml {
+            name: Some(name),
+            target_type: Some("webpack"),
+            account_id: Some("fakeaccountid"),
+            ..Default::default()
+        }
     }
 
     pub fn zoneless(
@@ -124,9 +125,13 @@ impl WranglerToml {
         account_id: &'static str,
         workers_dev: bool,
     ) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack(name);
-        wrangler_toml.workers_dev = Some(workers_dev);
-        wrangler_toml.account_id = Some(account_id);
+        let wrangler_toml = WranglerToml {
+            workers_dev: Some(workers_dev),
+            account_id: Some(account_id),
+            ..WranglerToml::webpack(name)
+        };
+
+        eprintln!("{:#?}", &wrangler_toml);
 
         wrangler_toml
     }
@@ -136,11 +141,13 @@ impl WranglerToml {
         zone_id: &'static str,
         route: &'static str,
     ) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack(name);
-        wrangler_toml.zone_id = Some(zone_id);
-        wrangler_toml.route = Some(route);
-
+        let wrangler_toml = WranglerToml {
+            zone_id: Some(zone_id),
+            route: Some(route),
+            ..WranglerToml::webpack(name)
+        };
         eprintln!("{:#?}", &wrangler_toml);
+
         wrangler_toml
     }
 
@@ -149,19 +156,23 @@ impl WranglerToml {
         zone_id: &'static str,
         routes: Vec<&'static str>,
     ) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack(name);
-        wrangler_toml.zone_id = Some(zone_id);
-        wrangler_toml.routes = Some(routes);
-
+        let wrangler_toml = WranglerToml {
+            zone_id: Some(zone_id),
+            routes: Some(routes),
+            ..WranglerToml::webpack(name)
+        };
         eprintln!("{:#?}", &wrangler_toml);
+
         wrangler_toml
     }
 
     pub fn with_env(name: &'static str, env_config: EnvConfig) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack(name);
-        wrangler_toml.env = Some(test_env(env_config));
-
+        let wrangler_toml = WranglerToml {
+            env: Some(test_env(env_config)),
+            ..WranglerToml::webpack(name)
+        };
         eprintln!("{:#?}", &wrangler_toml);
+
         wrangler_toml
     }
 
@@ -171,74 +182,80 @@ impl WranglerToml {
         workers_dev: bool,
         env_config: EnvConfig,
     ) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::zoneless(name, account_id, workers_dev);
-        wrangler_toml.env = Some(test_env(env_config));
-
+        let wrangler_toml = WranglerToml {
+            env: Some(test_env(env_config)),
+            ..WranglerToml::zoneless(name, account_id, workers_dev)
+        };
         eprintln!("{:#?}", &wrangler_toml);
+
         wrangler_toml
     }
 
-    pub fn zoned_single_route_with_env(
+    pub fn zoned_single_route_with_env_and_account_id(
         name: &'static str,
         zone_id: &'static str,
         route: &'static str,
         env_config: EnvConfig,
     ) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::zoned_single_route(name, zone_id, route);
-        wrangler_toml.env = Some(test_env(env_config));
-
+        let wrangler_toml = WranglerToml {
+            env: Some(test_env(env_config)),
+            account_id: Some("fakeaccountid"),
+            ..WranglerToml::zoned_single_route(name, zone_id, route)
+        };
         eprintln!("{:#?}", &wrangler_toml);
+
         wrangler_toml
     }
 
     pub fn webpack_build(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::default();
-        wrangler_toml.name = Some(name);
-        wrangler_toml.workers_dev = Some(true);
-        wrangler_toml.target_type = Some("webpack");
-
-        wrangler_toml
+        WranglerToml {
+            name: Some(name),
+            workers_dev: Some(true),
+            target_type: Some("webpack"),
+            ..Default::default()
+        }
     }
 
     pub fn webpack_std_config(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack_build(name);
-        wrangler_toml.webpack_config = Some("webpack.config.js");
-
-        wrangler_toml
+        WranglerToml {
+            webpack_config: Some("webpack.config.js"),
+            ..WranglerToml::webpack_build(name)
+        }
     }
 
     pub fn webpack_custom_config(name: &'static str, webpack_config: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack_build(name);
-        wrangler_toml.webpack_config = Some(webpack_config);
-
-        wrangler_toml
+        WranglerToml {
+            webpack_config: Some(webpack_config),
+            ..WranglerToml::webpack_build(name)
+        }
     }
 
     pub fn rust(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::default();
-        wrangler_toml.name = Some(name);
-        wrangler_toml.workers_dev = Some(true);
-        wrangler_toml.target_type = Some("rust");
-
-        wrangler_toml
+        WranglerToml {
+            name: Some(name),
+            workers_dev: Some(true),
+            target_type: Some("rust"),
+            ..Default::default()
+        }
     }
 
     pub fn javascript(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::default();
-        wrangler_toml.name = Some(name);
-        wrangler_toml.workers_dev = Some(true);
-        wrangler_toml.target_type = Some("javascript");
-
-        wrangler_toml
+        WranglerToml {
+            name: Some(name),
+            workers_dev: Some(true),
+            target_type: Some("javascript"),
+            ..Default::default()
+        }
     }
 
     pub fn site(name: &'static str) -> WranglerToml {
-        let mut wrangler_toml = WranglerToml::webpack_build(name);
-        let mut site = SiteConfig::default();
-        site.bucket = Some("./public");
-        wrangler_toml.site = Some(site);
-
-        wrangler_toml
+        WranglerToml {
+            site: Some(SiteConfig {
+                bucket: Some("./public"),
+                ..Default::default()
+            }),
+            ..WranglerToml::webpack_build(name)
+        }
     }
 }
 

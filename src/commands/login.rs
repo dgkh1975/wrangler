@@ -1,5 +1,6 @@
 use crate::login;
+use anyhow::Result;
 
-pub fn run() -> Result<(), failure::Error> {
-    login::run()
+pub fn run(scopes_list: Option<&[String]>) -> Result<()> {
+    login::run(scopes_list)
 }
