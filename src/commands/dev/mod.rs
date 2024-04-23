@@ -5,6 +5,9 @@ mod socket;
 mod tls;
 mod utils;
 
+use hyper::client::HttpConnector;
+use hyper::Body;
+use hyper_rustls::HttpsConnector;
 pub use server_config::Protocol;
 pub use server_config::ServerConfig;
 
@@ -16,6 +19,16 @@ use crate::terminal::message::{Message, StdOut};
 use crate::terminal::styles;
 
 use anyhow::Result;
+
+fn client() -> hyper::Client<HttpsConnector<HttpConnector>> {
+    let builder = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http();
+    // Cloudflare doesn't currently support websockets with HTTP/2.
+    // Allow using HTTP/1.1 for websocket connections.
+    let https = builder.enable_http1().build();
+    hyper::Client::builder().build::<_, Body>(https)
+}
 
 /// `wrangler dev` starts a server on a dev machine that routes incoming HTTP requests
 /// to a Cloudflare Workers runtime and returns HTTP responses
@@ -29,6 +42,7 @@ pub fn dev(
     upstream_protocol: Protocol,
     verbose: bool,
     inspect: bool,
+    unauthenticated: bool,
 ) -> Result<()> {
     // before serving requests we must first build the Worker
     build_target(&target)?;
@@ -70,8 +84,7 @@ pub fn dev(
     }
 
     if let Some(user) = user {
-        if server_config.host.is_default() {
-            // Authenticated and no host provided, run on edge with user's zone
+        if !unauthenticated {
             return edge::dev(
                 target,
                 user,
@@ -83,14 +96,12 @@ pub fn dev(
                 inspect,
             );
         }
-
-        // If user is authenticated but host is provided, use gcs with given host
-        StdOut::warn(
-            format!(
-                "{} provided, will run unauthenticated and upstream to provided host",
-                host_str
-            )
-            .as_str(),
+    } else {
+        let wrangler_config_msg = styles::highlight("`wrangler config`");
+        let wrangler_login_msg = styles::highlight("`wrangler login`");
+        let docs_url_msg = styles::url("https://developers.cloudflare.com/workers/tooling/wrangler/configuration/#using-environment-variables");
+        StdOut::billboard(
+        &format!("You have not provided your Cloudflare credentials.\n\nPlease run {}, {}, or visit\n{}\nfor info on authenticating with environment variables.", wrangler_login_msg, wrangler_config_msg, docs_url_msg)
         );
     }
 

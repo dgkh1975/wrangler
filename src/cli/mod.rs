@@ -8,6 +8,7 @@ pub mod login;
 pub mod logout;
 pub mod preview;
 pub mod publish;
+pub mod r2;
 pub mod route;
 pub mod secret;
 pub mod subdomain;
@@ -27,6 +28,7 @@ pub mod exec {
     pub use super::logout::logout;
     pub use super::preview::preview;
     pub use super::publish::publish;
+    pub use super::r2::r2_bucket;
     pub use super::route::route;
     pub use super::secret::secret;
     pub use super::subdomain::subdomain;
@@ -88,6 +90,10 @@ pub enum Command {
     /// Interact with multiple Workers KV key-value pairs at once
     #[structopt(name = "kv:bulk", setting = AppSettings::SubcommandRequiredElseHelp)]
     KvBulk(kv::KvBulk),
+
+    /// Interact with your Workers R2 Buckets
+    #[structopt(setting = AppSettings::SubcommandRequiredElseHelp)]
+    R2(r2::R2),
 
     /// List or delete worker routes.
     #[structopt(name = "route", setting = AppSettings::SubcommandRequiredElseHelp)]
@@ -185,6 +191,10 @@ pub enum Command {
         /// Inspect the worker using Chrome DevTools
         #[structopt(long)]
         inspect: bool,
+
+        /// Run wrangler dev unauthenticated
+        #[structopt(long)]
+        unauthenticated: bool,
     },
 
     /// Publish your worker to the orange cloud
@@ -290,17 +300,9 @@ pub enum Command {
     },
 
     /// Logout from your current authentication method and remove any configuration files.
-    /// It does not logout if you have authenticated wrangler through envrionment variables.
+    /// It does not logout if you have authenticated wrangler through environment variables.
     #[structopt(name = "logout")]
     Logout,
-
-    /// Report an error caught by wrangler to Cloudflare
-    #[structopt(name = "report")]
-    Report {
-        /// Specifies a log to report (e.g. --log=1619728882567.log)
-        #[structopt(name = "log", long)]
-        log: Option<PathBuf>,
-    },
 }
 
 #[derive(Debug, Clone, StructOpt)]
