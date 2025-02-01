@@ -23,6 +23,7 @@ use crate::settings::toml::dev::Dev;
 use crate::settings::toml::durable_objects::DurableObjects;
 use crate::settings::toml::environment::Environment;
 use crate::settings::toml::kv_namespace::{ConfigKvNamespace, KvNamespace};
+use crate::settings::toml::r2_bucket::{ConfigR2Bucket, R2Bucket};
 use crate::settings::toml::route::RouteConfig;
 use crate::settings::toml::site::Site;
 use crate::settings::toml::target_type::TargetType;
@@ -63,6 +64,7 @@ pub struct Manifest {
     pub env: Option<HashMap<String, Environment>>,
     #[serde(alias = "kv-namespaces")]
     pub kv_namespaces: Option<Vec<ConfigKvNamespace>>,
+    pub r2_buckets: Option<Vec<ConfigR2Bucket>>,
     // TODO: maybe one day, serde toml support will allow us to serialize sites
     // as a TOML inline table (this would prevent confusion with environments too!)
     pub site: Option<Site>,
@@ -93,13 +95,6 @@ impl Manifest {
         };
 
         check_for_duplicate_names(&manifest)?;
-
-        if manifest.compatibility_date.is_none() {
-            StdOut::warn(&format!(
-                "Your configuration file is missing compatibility_date, so a distant past date is assumed. To get the latest possibly-breaking bug fixes, add this line to your wrangler.toml:\n\n    compatibility_date = \"{}\"\n",
-                Utc::now().format("%F")));
-            StdOut::warn("For more information about compatibility dates, see: https://developers.cloudflare.com/workers/platform/compatibility-dates");
-        }
 
         Ok(manifest)
     }
@@ -183,7 +178,7 @@ impl Manifest {
         config_template_doc["compatibility_date"] =
             toml_edit::value(Utc::now().format("%F").to_string());
 
-        // TODO: https://github.com/cloudflare/wrangler/issues/773
+        // TODO: https://github.com/cloudflare/wrangler-legacy/issues/773
 
         let toml = config_template_doc.to_string_in_original_order();
         let manifest = toml::from_str::<Manifest>(&toml)?;
@@ -381,11 +376,15 @@ impl Manifest {
             // to include the name of the environment
             name: self.name.clone(), // Inherited
             kv_namespaces: get_namespaces(self.kv_namespaces.clone(), preview)?, // Not inherited
+            r2_buckets: get_buckets(self.r2_buckets.clone(), preview)?, // Not inherited
             durable_objects: self.durable_objects.clone(), // Not inherited
-            migrations: self.migrations.as_ref().map(|migrations| Migrations::List {
-                script_tag: MigrationTag::Unknown,
-                migrations: migrations.clone(),
-            }), // Top Level
+            migrations: match (preview, &self.migrations) {
+                (false, Some(migrations)) => Some(Migrations::List {
+                    script_tag: MigrationTag::Unknown,
+                    migrations: migrations.clone(),
+                }),
+                _ => None,
+            }, // Top level
             site: self.site.clone(), // Inherited
             vars: self.vars.clone(), // Not inherited
             text_blobs: self.text_blobs.clone(), // Inherited
@@ -411,6 +410,9 @@ impl Manifest {
 
             // don't inherit kv namespaces because it is an anti-pattern to use the same namespaces across multiple environments
             target.kv_namespaces = get_namespaces(environment.kv_namespaces.clone(), preview)?;
+
+            // don't inherit r2 buckets because it is an anti-pattern to use the same buckets across multiple environments
+            target.r2_buckets = get_buckets(environment.r2_buckets.clone(), preview)?;
 
             // don't inherit durable object configuration
             target.durable_objects = environment.durable_objects.clone();
@@ -449,6 +451,25 @@ impl Manifest {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn warn_about_compatibility_date(&self) {
+        if self.compatibility_date.is_some() {
+            return;
+        }
+        let current_date = Utc::now().format("%F");
+        let message = &format!(
+            r#"
+    Your configuration file is missing compatibility_date, so a past date is assumed.
+    To get the latest possibly-breaking bug fixes, add this line to your wrangler.toml:
+
+        compatibility_date = "{}"
+
+    For more information, see: https://developers.cloudflare.com/workers/platform/compatibility-dates
+        "#,
+            current_date
+        );
+        StdOut::warn(message);
     }
 
     fn warn_on_account_info(&self) {
@@ -728,6 +749,37 @@ fn get_namespaces(
                 })
             } else {
                 anyhow::bail!("You must specify the namespace ID in the id field for the namespace with binding \"{}\"", &ns.binding)
+            }
+        }).collect()
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+fn get_buckets(r2_buckets: Option<Vec<ConfigR2Bucket>>, preview: bool) -> Result<Vec<R2Bucket>> {
+    if let Some(buckets) = r2_buckets {
+        buckets.into_iter().map(|ns| {
+            if preview {
+                if let Some(preview_bucket_name) = &ns.preview_bucket_name {
+                    if let Some(bucket_name) = &ns.bucket_name {
+                        if preview_bucket_name == bucket_name {
+                            StdOut::warn("Specifying the same r2 bucket_name for both preview and production sessions may cause bugs in your production worker! Proceed with caution.");
+                        }
+                    }
+                    Ok(R2Bucket {
+                        bucket_name: preview_bucket_name.to_string(),
+                        binding: ns.binding.to_string(),
+                    })
+                } else {
+                    anyhow::bail!("In order to preview a worker with r2 buckets, you must designate a preview_bucket_name in your configuration file for each r2 bucket you'd like to preview.")
+                }
+            } else if let Some(bucket_name) = &ns.bucket_name {
+                Ok(R2Bucket {
+                    bucket_name: bucket_name.to_string(),
+                    binding: ns.binding,
+                })
+            } else {
+                anyhow::bail!("You must specify the bucket name in the bucket_name field for the bucket with binding \"{}\"", &ns.binding)
             }
         }).collect()
     } else {
